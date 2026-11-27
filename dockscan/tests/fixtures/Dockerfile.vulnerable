@@ -1,0 +1,23 @@
+# Intentionally vulnerable Dockerfile for testing `dockscan` (synthetic fake credentials only).
+FROM alpine:3.19
+
+LABEL maintainer="security-test" \
+      org.test.api_secret="FakeTestLabelSecret1234567890"
+
+ENV APP_ENV="production" \
+    AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE" \
+    DATABASE_URL="postgres://admin:SuperSecretDbPass99@db.internal:5432/app"
+
+WORKDIR /app
+
+# Layer 1: bake a secret file and private key into the filesystem
+RUN printf 'STRIPE_KEY=sk_%s_%s\n' 'live' 'FakeTestKey1234567890abcdef' > /app/.env && \
+    echo "-----BEGIN RSA PRIVATE KEY-----" > /app/id_rsa && \
+    echo "FAKE_KEY_BODY_FOR_TESTING_ONLY" >> /app/id_rsa && \
+    echo "-----END RSA PRIVATE KEY-----" >> /app/id_rsa
+
+# Layer 2: delete .env in a later layer (still recoverable in layer 1!)
+RUN rm -f /app/.env
+
+# Layer 3: leak a credential in build history
+RUN echo "simulating curl -u deploy:BuildTimePass123!" >/dev/null

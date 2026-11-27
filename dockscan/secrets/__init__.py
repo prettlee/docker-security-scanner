@@ -1,5 +1,6 @@
 """Secret detection engines, rules, scanners, and aggregator."""
 
+from dockscan.secrets.aggregator import aggregate_findings
 from dockscan.secrets.entropy_detector import (
     detect_high_entropy_in_text,
     shannon_entropy,
@@ -13,6 +14,7 @@ __all__ = [
     "PatternMatch",
     "SECRET_RULES",
     "SecretRule",
+    "aggregate_findings",
     "detect_high_entropy_in_text",
     "detect_patterns_in_text",
     "scan_layer_file",
