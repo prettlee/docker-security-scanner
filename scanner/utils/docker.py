@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import Any, Dict, List
 
-from scanner.models import Capabilities, ImageMetadata
+from scanner.models import Capabilities, ImageMetadata, PortBinding
 
 
 class DockerInspectError(RuntimeError):
@@ -46,6 +46,30 @@ def _parse_exposed_ports(raw_ports: Any) -> List[str]:
     return sorted(str(port) for port in raw_ports.keys())
 
 
+def _parse_port_bindings(host_config: Dict[str, Any]) -> List[PortBinding]:
+    """Extract published host port bindings from HostConfig.PortBindings."""
+    raw_bindings = host_config.get("PortBindings")
+    if not isinstance(raw_bindings, dict):
+        return []
+
+    bindings: List[PortBinding] = []
+    for container_port in sorted(raw_bindings.keys()):
+        entries = raw_bindings.get(container_port)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            bindings.append(
+                PortBinding(
+                    container_port=str(container_port),
+                    host_ip=str(entry.get("HostIp") or ""),
+                    host_port=str(entry.get("HostPort") or ""),
+                )
+            )
+    return bindings
+
+
 def _parse_capabilities(host_config: Dict[str, Any]) -> Capabilities:
     """Extract CapAdd/CapDrop from HostConfig when present (e.g. containers)."""
     cap_add = host_config.get("CapAdd")
@@ -80,6 +104,7 @@ def parse_inspect_output(raw_json: str, target: str) -> ImageMetadata:
         target=target,
         user=user,
         exposed_ports=_parse_exposed_ports(config.get("ExposedPorts")),
+        port_bindings=_parse_port_bindings(host_config),
         env=_parse_env(config.get("Env")),
         entrypoint=_parse_entrypoint(config.get("Entrypoint")),
         capabilities=_parse_capabilities(host_config),

@@ -13,12 +13,27 @@ class Capabilities:
 
 
 @dataclass
+class PortBinding:
+    """Host port binding configured on a container."""
+
+    container_port: str
+    host_ip: str
+    host_port: str
+
+    @property
+    def is_public(self) -> bool:
+        """Return True when bound to all interfaces (IPv4/IPv6 wildcard)."""
+        return self.host_ip in ("", "0.0.0.0", "::")
+
+
+@dataclass
 class ImageMetadata:
     """Subset of Docker image/container metadata extracted from `docker inspect`."""
 
     target: str
     user: str
     exposed_ports: List[str] = field(default_factory=list)
+    port_bindings: List[PortBinding] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
     entrypoint: List[str] = field(default_factory=list)
     capabilities: Capabilities = field(default_factory=Capabilities)

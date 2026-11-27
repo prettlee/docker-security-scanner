@@ -4,15 +4,42 @@ A Python-based security scanner to analyze Docker images (and containers) for in
 
 ## Phase 2 — Minimal Viable Scanner (Version 1)
 
-Current Version 1 features:
-- **Image/Container Metadata Parsing (`docker inspect`)**:
-  - `user` (`Config.User`)
-  - `exposed_ports` (`Config.ExposedPorts`)
-  - `env` (`Config.Env`)
-  - `entrypoint` (`Config.Entrypoint`)
-  - `capabilities` (`HostConfig.CapAdd` / `HostConfig.CapDrop` when inspecting containers)
-- **Root Container Detection (`DOCKER-001`)**:
-  - Flags targets where `Config.User` is empty (`""`), `"root"`, or `"0"` (including `user:group` forms like `root:root` or `0:0`).
+### Features
+1. **Image/Container Metadata Parsing (`docker inspect`)**:
+   - `user` (`Config.User`)
+   - `exposed_ports` (`Config.ExposedPorts`) and `port_bindings` (`HostConfig.PortBindings`)
+   - `env` (`Config.Env`)
+   - `entrypoint` (`Config.Entrypoint`)
+   - `capabilities` (`HostConfig.CapAdd` / `HostConfig.CapDrop` when inspecting containers)
+2. **Root Container Detection (`DOCKER-001`)**:
+   - Flags targets where `Config.User` is empty (`""`), `"root"`, or `"0"` (including `user:group` forms like `root:root` or `0:0`).
+3. **Dangerous Port Detection (`DOCKER-002`)**:
+   - Flags SSH (`22`), unencrypted Docker daemon API (`2375`), and publicly exposed database ports (`1433`, `1521`, `3306`, `5432`, `5984`, `6379`, `9042`, `9200`, `9300`, `11211`, `27017`).
+   - Distinguishes container `HostConfig.PortBindings` bound to `127.0.0.1` vs public interfaces (`0.0.0.0` / `::` / `""`).
+4. **Suspicious Environment Variables (`DOCKER-003`)**:
+   - Scans `Config.Env` keys for `API_KEY`, `SECRET`, `PASSWORD`, and `TOKEN` (case-insensitive) and redacts secret values in finding evidence.
+
+## Project Architecture
+
+```text
+scanner/
+├── __init__.py
+├── __main__.py
+├── cli.py
+├── models.py
+├── scanner.py
+├── checks/
+│   ├── __init__.py
+│   ├── root_check.py
+│   ├── ports_check.py
+│   └── env_check.py
+├── utils/
+│   ├── __init__.py
+│   └── docker.py
+└── reports/
+    ├── __init__.py
+    └── formatter.py
+```
 
 ## Usage
 
@@ -27,6 +54,9 @@ python3 -m scanner nginx:latest
 
 # Output JSON
 python3 main.py nginx:latest --json
+
+# Save report to a file
+python3 main.py nginx:latest --json --output report.json
 ```
 
 Exit codes:
