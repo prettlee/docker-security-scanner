@@ -9,6 +9,11 @@ from dockscan.dockerfile.parser import (
     parse_dockerfile_file,
     parse_dockerfile_text,
 )
+from dockscan.dockerfile.security_checks import (
+    check_hardcoded_credentials,
+    check_insecure_install_commands,
+    check_unpinned_dependencies,
+)
 from dockscan.models.finding import Finding, ScanReport
 from dockscan.reporting import aggregate_findings, score_confidence
 
@@ -270,7 +275,10 @@ def _analyze_parsed(parsed: ParsedDockerfile) -> ScanReport:
     raw_findings: List[Finding] = []
     raw_findings.extend(check_latest_tags(parsed))
     raw_findings.extend(check_non_root_user(parsed))
+    raw_findings.extend(check_hardcoded_credentials(parsed))
     raw_findings.extend(check_unsafe_add(parsed))
+    raw_findings.extend(check_unpinned_dependencies(parsed))
+    raw_findings.extend(check_insecure_install_commands(parsed))
     raw_findings.extend(check_missing_healthcheck(parsed))
 
     return ScanReport(
