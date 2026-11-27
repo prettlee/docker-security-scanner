@@ -96,6 +96,9 @@ def parse_inspect_output(raw_json: str, target: str) -> ImageMetadata:
 
     config = obj.get("Config") or {}
     host_config = obj.get("HostConfig") or {}
+    state = obj.get("State")
+    is_container = isinstance(state, dict)
+    is_running = bool(state.get("Running")) if is_container else False
 
     raw_user = config.get("User")
     user = str(raw_user).strip() if raw_user is not None else ""
@@ -108,6 +111,8 @@ def parse_inspect_output(raw_json: str, target: str) -> ImageMetadata:
         env=_parse_env(config.get("Env")),
         entrypoint=_parse_entrypoint(config.get("Entrypoint")),
         capabilities=_parse_capabilities(host_config),
+        is_container=is_container,
+        is_running=is_running,
     )
 
 

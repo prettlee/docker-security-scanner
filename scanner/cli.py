@@ -13,11 +13,16 @@ def build_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="docker-security-scanner",
-        description="Analyze Docker images/containers for insecure configurations.",
+        description="Analyze Docker images/containers for insecure configurations and vulnerabilities.",
     )
     parser.add_argument(
         "target",
         help="Docker image name/ID or container name/ID to inspect.",
+    )
+    parser.add_argument(
+        "--no-vuln",
+        action="store_true",
+        help="Skip package extraction and OSV.dev vulnerability scanning.",
     )
     parser.add_argument(
         "--json",
@@ -38,7 +43,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        result = scan_target(args.target)
+        result = scan_target(args.target, include_vulns=not args.no_vuln)
     except DockerInspectError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2

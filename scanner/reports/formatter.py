@@ -1,5 +1,6 @@
 """Format and optionally write scan reports in text or JSON."""
 
+from collections import Counter
 import json
 from pathlib import Path
 from typing import List, Union
@@ -8,8 +9,18 @@ from scanner.checks.env_check import is_suspicious_env_key, redact_value
 from scanner.models import ScanResult
 
 
+def _format_packages_summary(result: ScanResult) -> str:
+    """Summarize detected packages by ecosystem."""
+    packages = result.metadata.packages
+    if not packages:
+        return "(none)"
+    counts = Counter(pkg.ecosystem for pkg in packages)
+    breakdown = ", ".join(f"{eco}: {counts[eco]}" for eco in sorted(counts))
+    return f"{len(packages)} package(s) ({breakdown})"
+
+
 def format_text_report(result: ScanResult) -> str:
-    """Format scan metadata and findings into a readable terminal report."""
+    """Format scan metadata, warnings, and findings into a readable terminal report."""
     meta = result.metadata
     lines: List[str] = [
         f"Target: {meta.target}",
@@ -29,6 +40,7 @@ def format_text_report(result: ScanResult) -> str:
     lines.extend(
         [
             f"  Entrypoint:    {meta.entrypoint if meta.entrypoint else '(none)'}",
+            f"  Packages:      {_format_packages_summary(result)}",
             f"  Env Vars:      {len(meta.env)} variable(s)",
         ]
     )
@@ -43,6 +55,13 @@ def format_text_report(result: ScanResult) -> str:
     cap_add = ", ".join(meta.capabilities.add) if meta.capabilities.add else "(none)"
     cap_drop = ", ".join(meta.capabilities.drop) if meta.capabilities.drop else "(none)"
     lines.append(f"  Capabilities:  CapAdd={cap_add}, CapDrop={cap_drop}")
+
+    if result.warnings:
+        lines.append("")
+        lines.append(f"Warnings ({len(result.warnings)}):")
+        for warning in result.warnings:
+            lines.append(f"  [WARN] {warning}")
+
     lines.append("")
     lines.append(f"Findings ({len(result.findings)}):")
 

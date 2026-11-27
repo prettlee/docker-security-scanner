@@ -1,4 +1,4 @@
-"""Data models for parsed Docker metadata and security findings."""
+"""Data models for parsed Docker metadata, installed packages, and security findings."""
 
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
@@ -26,6 +26,15 @@ class PortBinding:
         return self.host_ip in ("", "0.0.0.0", "::")
 
 
+@dataclass(frozen=True)
+class InstalledPackage:
+    """Software package detected inside an image or container."""
+
+    ecosystem: str
+    name: str
+    version: str
+
+
 @dataclass
 class ImageMetadata:
     """Subset of Docker image/container metadata extracted from `docker inspect`."""
@@ -37,6 +46,9 @@ class ImageMetadata:
     env: Dict[str, str] = field(default_factory=dict)
     entrypoint: List[str] = field(default_factory=list)
     capabilities: Capabilities = field(default_factory=Capabilities)
+    is_container: bool = False
+    is_running: bool = False
+    packages: List[InstalledPackage] = field(default_factory=list)
 
 
 @dataclass
@@ -53,10 +65,11 @@ class Finding:
 
 @dataclass
 class ScanResult:
-    """Complete scan output combining extracted metadata and findings."""
+    """Complete scan output combining extracted metadata, findings, and warnings."""
 
     metadata: ImageMetadata
     findings: List[Finding] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the scan result into plain Python dicts/lists for JSON output."""
