@@ -1,0 +1,14 @@
+# Intentionally insecure Dockerfile fixture for Phase 6 static analysis tests.
+FROM python:latest
+
+ARG DB_PASSWORD=SuperInsecureBuildPassword99
+ENV AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+
+ADD https://example.com/setup.tar.gz /tmp/setup.tar.gz
+
+RUN apt-get update && apt-get install -y curl && \
+    pip install --no-cache-dir flask requests && \
+    curl -sSL https://example.com/install.sh | bash && \
+    chmod 777 /tmp/setup.tar.gz
+
+CMD ["python", "app.py"]

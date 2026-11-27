@@ -14,6 +14,7 @@ from dockscan.docker.layer_extractor import (
     read_image_manifest,
 )
 from dockscan.docker.metadata import DockerMetadata, extract_metadata_from_tar
+from dockscan.dockerfile.analyzer import analyze_dockerfile_file
 from dockscan.models.finding import Finding, ScanReport
 from dockscan.reporting import (
     aggregate_findings,
@@ -177,6 +178,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write the JSON report to the specified file path.",
     )
     parser.add_argument(
+        "--dockerfile",
+        action="store_true",
+        help="Treat `target` as a Dockerfile path and run static Dockerfile analysis.",
+    )
+    parser.add_argument(
         "--no-sdk",
         action="store_true",
         help="Skip Docker Python SDK and use `docker image save` directly.",
@@ -190,17 +196,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     max_bytes = max(1, int(args.max_file_mb * 1024 * 1024))
 
-    try:
-        report = scan_image(
-            args.target,
-            max_file_bytes=max_bytes,
-            prefer_sdk=not args.no_sdk,
-            include_config=not args.secrets_only,
-            include_vulns=args.with_vulns,
-        )
-    except (ImageLoadError, LayerExtractionError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+    if args.dockerfile:
+        df_path = Path(args.target)
+        if not df_path.is_file():
+            print(f"Error: Dockerfile not found: {df_path}", file=sys.stderr)
+            return 2
+        report = analyze_dockerfile_file(df_path)
+    else:
+        try:
+            report = scan_image(
+                args.target,
+                max_file_bytes=max_bytes,
+                prefer_sdk=not args.no_sdk,
+                include_config=not args.secrets_only,
+                include_vulns=args.with_vulns,
+            )
+        except (ImageLoadError, LayerExtractionError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
 
     if args.json:
         print(format_json_report(report))
