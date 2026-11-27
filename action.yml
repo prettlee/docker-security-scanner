@@ -1,0 +1,120 @@
+name: "Dockscan Docker Security Scanner"
+description: "Scan Docker images, saved image tarballs, and Dockerfiles for secrets, misconfigurations, and CVEs."
+author: "prettlee"
+
+inputs:
+  target:
+    description: "Docker image reference (e.g. my-app:latest), saved .tar path, or Dockerfile path."
+    required: true
+  scan-type:
+    description: "Scan mode: 'image' (default) or 'dockerfile'."
+    required: false
+    default: "image"
+  with-vulns:
+    description: "Extract installed packages and query OSV.dev for CVEs in image mode ('true' or 'false')."
+    required: false
+    default: "false"
+  secrets-only:
+    description: "Skip image configuration checks in image mode ('true' or 'false')."
+    required: false
+    default: "false"
+  fail-on:
+    description: "Minimum severity threshold to fail the step: critical, high, medium, low, or none."
+    required: false
+    default: "high"
+  max-file-mb:
+    description: "Maximum text file size to scan in MB."
+    required: false
+    default: "10"
+  output-file:
+    description: "Path where the JSON scan report will be written."
+    required: false
+    default: "dockscan-report.json"
+
+outputs:
+  report-path:
+    description: "Path to the generated JSON report."
+    value: ${{ steps.run-dockscan.outputs.report_path }}
+  total-findings:
+    description: "Total number of findings detected."
+    value: ${{ steps.run-dockscan.outputs.total_findings }}
+  critical-count:
+    description: "Number of Critical severity findings."
+    value: ${{ steps.run-dockscan.outputs.critical_count }}
+  high-count:
+    description: "Number of High severity findings."
+    value: ${{ steps.run-dockscan.outputs.high_count }}
+  medium-count:
+    description: "Number of Medium severity findings."
+    value: ${{ steps.run-dockscan.outputs.medium_count }}
+  low-count:
+    description: "Number of Low severity findings."
+    value: ${{ steps.run-dockscan.outputs.low_count }}
+  passed:
+    description: "'true' if the scan passed the fail-on threshold, 'false' otherwise."
+    value: ${{ steps.run-dockscan.outputs.passed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Run Dockscan
+      id: run-dockscan
+      shell: bash
+      env:
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_SCAN_TYPE: ${{ inputs.scan-type }}
+        INPUT_WITH_VULNS: ${{ inputs.with-vulns }}
+        INPUT_SECRETS_ONLY: ${{ inputs.secrets-only }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_MAX_FILE_MB: ${{ inputs.max-file-mb }}
+        INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+      run: |
+        set +e
+        ARGS=("${INPUT_TARGET}" "--output" "${INPUT_OUTPUT_FILE}" "--fail-on" "${INPUT_FAIL_ON}" "--github-summary")
+
+        if [ "${INPUT_SCAN_TYPE}" = "dockerfile" ]; then
+          ARGS+=("--dockerfile")
+        else
+          ARGS+=("--max-file-mb" "${INPUT_MAX_FILE_MB}")
+          if [ "${INPUT_WITH_VULNS}" = "true" ]; then
+            ARGS+=("--with-vulns")
+          fi
+          if [ "${INPUT_SECRETS_ONLY}" = "true" ]; then
+            ARGS+=("--secrets-only")
+          fi
+        fi
+
+        PYTHONPATH="${{ github.action_path }}" python3 -m dockscan "${ARGS[@]}"
+        EXIT_CODE=$?
+
+        echo "report_path=${INPUT_OUTPUT_FILE}" >> "${GITHUB_OUTPUT}"
+        if [ -f "${INPUT_OUTPUT_FILE}" ]; then
+          python3 - "${INPUT_OUTPUT_FILE}" "${GITHUB_OUTPUT}" << 'PYEOF'
+        import json
+        import sys
+
+        report_file, gh_output = sys.argv[1], sys.argv[2]
+        with open(report_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        summary = data.get("summary", {})
+        sev = summary.get("by_severity", {})
+        with open(gh_output, "a", encoding="utf-8") as out:
+            out.write(f"total_findings={summary.get('total_findings', 0)}\n")
+            out.write(f"critical_count={sev.get('Critical', 0)}\n")
+            out.write(f"high_count={sev.get('High', 0)}\n")
+            out.write(f"medium_count={sev.get('Medium', 0)}\n")
+            out.write(f"low_count={sev.get('Low', 0)}\n")
+        PYEOF
+        fi
+
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          echo "passed=true" >> "${GITHUB_OUTPUT}"
+        else
+          echo "passed=false" >> "${GITHUB_OUTPUT}"
+        fi
+        exit "${EXIT_CODE}"

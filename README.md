@@ -15,84 +15,48 @@ A Python-based security scanner to analyze Dockerfiles, Docker images, and conta
 3. **`dockscan/dockerfile/` (Phase 6 — Static Dockerfile Security Analysis)**
    - Analyzes Dockerfiles independently from built images (handling line continuations and multi-stage builds)
    - Detects `:latest`/untagged `FROM` images, missing non-root `USER`, hardcoded credentials, unsafe `ADD` instructions, unpinned `pip`/`npm`/`apt`/`apk` dependencies, insecure `RUN` install commands (`curl|sh`, disabled TLS/signature verification, `http://`, `chmod 777`), and missing `HEALTHCHECK`
-
-## Project Architecture (`dockscan/`)
-
-```text
-dockscan/
-├── __init__.py
-├── __main__.py
-├── scanner.py
-├── dockerfile/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── cli.py
-│   ├── parser.py
-│   ├── analyzer.py
-│   └── security_checks.py
-├── docker/
-│   ├── image_loader.py
-│   ├── layer_extractor.py
-│   └── metadata.py
-├── secrets/
-│   ├── filesystem_scanner.py
-│   ├── metadata_scanner.py
-│   ├── pattern_detector.py
-│   ├── entropy_detector.py
-│   ├── rules.py
-│   └── aggregator.py
-├── reporting/
-│   ├── aggregator.py
-│   ├── scoring.py
-│   ├── terminal.py
-│   └── json_report.py
-├── models/
-│   └── finding.py
-└── tests/
-    ├── fixtures/
-    │   ├── Dockerfile.insecure
-    │   └── Dockerfile.vulnerable
-    ├── test_layer_extraction.py
-    ├── test_pattern_detector.py
-    ├── test_entropy_and_filesystem.py
-    ├── test_metadata_scanner.py
-    ├── test_reporting.py
-    ├── test_dockerfile_parser.py
-    ├── test_dockerfile_structure_checks.py
-    ├── test_dockerfile_security_checks.py
-    ├── test_dockerfile_cli.py
-    └── test_end_to_end.py
-```
+4. **GitHub Action CI/CD Integration (`action.yml` & `.github/workflows/ci.yml`)**
+   - Reusable composite GitHub Action with configurable `fail-on` severity threshold, JSON report output, step outputs (`total-findings`, `critical-count`, etc.), and automatic `$GITHUB_STEP_SUMMARY` Markdown reports
 
 ## Usage
+
+### GitHub Action (CI/CD)
+
+```yaml
+- name: Scan Docker image
+  uses: prettlee/docker-security-scanner@main
+  with:
+    target: my-app:latest
+    scan-type: image
+    with-vulns: "true"
+    fail-on: high
+    output-file: dockscan-report.json
+```
+
+Or scan a Dockerfile in CI:
+
+```yaml
+- name: Scan Dockerfile
+  uses: prettlee/docker-security-scanner@main
+  with:
+    target: ./Dockerfile
+    scan-type: dockerfile
+    fail-on: high
+```
 
 ### Phase 6: Static Dockerfile Analysis
 
 ```bash
-# Standalone Dockerfile analyzer
 python3 -m dockscan.dockerfile ./Dockerfile
-
-# Or via dockscan --dockerfile
 python3 -m dockscan --dockerfile ./Dockerfile --json --output dockerfile-report.json
 ```
 
 ### Phases 4 & 5: Built Image Security & Secret Report
 
 ```bash
-# Static scan (secrets + image configuration checks; never runs the image)
 python3 -m dockscan my-app:latest
-
-# Include package extraction & OSV.dev CVE scanning
-python3 -m dockscan my-app:latest --with-vulns
-
-# Secret scanning only
-python3 -m dockscan my-app:latest --secrets-only
-
-# Scan a saved Docker image tarball
-python3 -m dockscan ./image.tar
-
-# Output JSON and save report
-python3 -m dockscan my-app:latest --json --output security-report.json
+python3 -m dockscan my-app:latest --with-vulns --fail-on high
+python3 -m dockscan ./image.tar --json --output security-report.json
 ```
 
 ### Phases 2 & 3 Scanner (`scanner`)

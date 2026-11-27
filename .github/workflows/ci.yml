@@ -1,0 +1,74 @@
+name: Dockscan CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Phase 2 & 3 tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Run Phase 4-6 tests
+        run: python3 -m unittest discover -s dockscan/tests -v
+
+  scan-demo:
+    name: Verify GitHub Action (Image + Dockerfile)
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build vulnerable demo image
+        run: |
+          docker build \
+            -f dockscan/tests/fixtures/Dockerfile.vulnerable \
+            -t dockscan-demo:test .
+
+      - name: Scan built Docker image with Dockscan Action
+        id: scan-image
+        uses: ./
+        with:
+          target: dockscan-demo:test
+          scan-type: image
+          with-vulns: "true"
+          fail-on: none
+          output-file: dockscan-image-report.json
+
+      - name: Scan Dockerfile with Dockscan Action
+        id: scan-dockerfile
+        uses: ./
+        with:
+          target: dockscan/tests/fixtures/Dockerfile.insecure
+          scan-type: dockerfile
+          fail-on: none
+          output-file: dockscan-dockerfile-report.json
+
+      - name: Verify Action Outputs
+        run: |
+          echo "Image findings: ${{ steps.scan-image.outputs.total-findings }}"
+          echo "Dockerfile findings: ${{ steps.scan-dockerfile.outputs.total-findings }}"
+          test "${{ steps.scan-image.outputs.total-findings }}" -gt 0
+          test "${{ steps.scan-dockerfile.outputs.total-findings }}" -gt 0
+
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockscan-security-reports
+          path: |
+            dockscan-image-report.json
+            dockscan-dockerfile-report.json

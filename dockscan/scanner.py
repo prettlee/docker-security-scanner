@@ -1,6 +1,7 @@
 """Main orchestrator and CLI for unified Docker security & secret scanning."""
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -17,10 +18,13 @@ from dockscan.docker.metadata import DockerMetadata, extract_metadata_from_tar
 from dockscan.dockerfile.analyzer import analyze_dockerfile_file
 from dockscan.models.finding import Finding, ScanReport
 from dockscan.reporting import (
+    FAIL_ON_CHOICES,
     aggregate_findings,
     convert_legacy_finding,
     format_json_report,
     format_terminal_report,
+    should_fail_ci,
+    write_github_summary,
     write_json_report,
 )
 from dockscan.secrets.filesystem_scanner import scan_layer_file
@@ -183,6 +187,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Treat `target` as a Dockerfile path and run static Dockerfile analysis.",
     )
     parser.add_argument(
+        "--fail-on",
+        choices=FAIL_ON_CHOICES,
+        default="low",
+        help="Minimum severity that causes a non-zero exit code (default: low; use 'none' to never fail).",
+    )
+    parser.add_argument(
+        "--github-summary",
+        action="store_true",
+        help="Append a Markdown security summary to $GITHUB_STEP_SUMMARY.",
+    )
+    parser.add_argument(
         "--no-sdk",
         action="store_true",
         help="Skip Docker Python SDK and use `docker image save` directly.",
@@ -191,7 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    """CLI entry point. Returns 0 if clean, 1 if findings exist, 2 on load/parse error."""
+    """CLI entry point. Returns 0 if passing, 1 if failing threshold met, 2 on load/parse error."""
     parser = build_parser()
     args = parser.parse_args(argv)
     max_bytes = max(1, int(args.max_file_mb * 1024 * 1024))
@@ -223,7 +238,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.output:
         write_json_report(report, args.output)
 
-    return 1 if report.findings else 0
+    if args.github_summary:
+        write_github_summary(report, os.environ.get("GITHUB_STEP_SUMMARY"))
+
+    return 1 if should_fail_ci(report, fail_on=args.fail_on) else 0
 
 
 if __name__ == "__main__":
