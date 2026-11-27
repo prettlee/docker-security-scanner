@@ -6,7 +6,12 @@ import sys
 from typing import List, Optional
 
 from dockscan.dockerfile.analyzer import analyze_dockerfile_file
-from dockscan.reporting import format_json_report, format_terminal_report, write_json_report
+from dockscan.reporting import (
+    format_json_report,
+    format_terminal_report,
+    write_html_report,
+    write_json_report,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +34,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="Write the JSON report to the specified file path.",
     )
+    parser.add_argument(
+        "--html",
+        help="Write an interactive HTML dashboard report to the specified path.",
+    )
     return parser
 
 
@@ -50,5 +59,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.output:
         write_json_report(report, args.output)
+
+    if args.html:
+        write_html_report(report, args.html)
 
     return 1 if report.findings else 0

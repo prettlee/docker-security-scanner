@@ -25,6 +25,7 @@ from dockscan.reporting import (
     format_terminal_report,
     should_fail_ci,
     write_github_summary,
+    write_html_report,
     write_json_report,
 )
 from dockscan.secrets.filesystem_scanner import scan_layer_file
@@ -182,6 +183,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write the JSON report to the specified file path.",
     )
     parser.add_argument(
+        "--html",
+        help="Write a self-contained interactive HTML dashboard to the specified path.",
+    )
+    parser.add_argument(
         "--dockerfile",
         action="store_true",
         help="Treat `target` as a Dockerfile path and run static Dockerfile analysis.",
@@ -237,6 +242,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.output:
         write_json_report(report, args.output)
+
+    if args.html:
+        write_html_report(report, args.html)
 
     if args.github_summary:
         write_github_summary(report, os.environ.get("GITHUB_STEP_SUMMARY"))

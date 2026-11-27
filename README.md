@@ -11,7 +11,7 @@ A Python-based security scanner to analyze Dockerfiles, Docker images, and conta
    - **Never executes the target image** during secret/config scanning: exports via Docker SDK or `docker image save` (or reads a `.tar` archive directly) and parses layers with Python `tarfile`
    - Scans individual layers (including files deleted in later layers) for text files up to 10 MB
    - Combines regex + contextual rules, Shannon entropy analysis, and image metadata scanning (`ENV`, `LABEL`, build `history`)
-   - **Unified Reporting (Phase 5)**: aggregates secrets, configuration checks, and optional CVE findings with severity classification (`Critical`, `High`, `Medium`, `Low`), numeric confidence scoring (`0.00–1.00`), redacted terminal output, and structured JSON reports
+   - **Unified Reporting (Phase 5)**: aggregates secrets, configuration checks, and optional CVE findings with severity classification (`Critical`, `High`, `Medium`, `Low`), numeric confidence scoring (`0.00–1.00`), redacted terminal output, structured JSON reports, and a self-contained interactive **HTML dashboard** (`--html`)
 3. **`dockscan/dockerfile/` (Phase 6 — Static Dockerfile Security Analysis)**
    - Analyzes Dockerfiles independently from built images (handling line continuations and multi-stage builds)
    - Detects `:latest`/untagged `FROM` images, missing non-root `USER`, hardcoded credentials, unsafe `ADD` instructions, unpinned `pip`/`npm`/`apt`/`apk` dependencies, insecure `RUN` install commands (`curl|sh`, disabled TLS/signature verification, `http://`, `chmod 777`), and missing `HEALTHCHECK`
@@ -48,14 +48,14 @@ Or scan a Dockerfile in CI:
 
 ```bash
 python3 -m dockscan.dockerfile ./Dockerfile
-python3 -m dockscan --dockerfile ./Dockerfile --json --output dockerfile-report.json
+python3 -m dockscan --dockerfile ./Dockerfile --json --output dockerfile-report.json --html dockerfile-report.html
 ```
 
 ### Phases 4 & 5: Built Image Security & Secret Report
 
 ```bash
 python3 -m dockscan my-app:latest
-python3 -m dockscan my-app:latest --with-vulns --fail-on high
+python3 -m dockscan my-app:latest --with-vulns --fail-on high --html dashboard.html
 python3 -m dockscan ./image.tar --json --output security-report.json
 ```
 

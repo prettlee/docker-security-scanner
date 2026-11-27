@@ -11,6 +11,7 @@ from dockscan.reporting.github_summary import (
     should_fail_ci,
     write_github_summary,
 )
+from dockscan.reporting.html_report import format_html_report, write_html_report
 from dockscan.reporting.json_report import format_json_report, write_json_report
 from dockscan.reporting.scoring import (
     classify_severity,
@@ -28,6 +29,7 @@ __all__ = [
     "confidence_label_from_score",
     "convert_legacy_finding",
     "format_github_summary",
+    "format_html_report",
     "format_json_report",
     "format_terminal_report",
     "normalize_confidence",
@@ -36,5 +38,6 @@ __all__ = [
     "score_confidence",
     "should_fail_ci",
     "write_github_summary",
+    "write_html_report",
     "write_json_report",
 ]
