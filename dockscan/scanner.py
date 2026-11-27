@@ -1,10 +1,10 @@
-"""Main orchestrator and CLI for Phase 4 Docker secret scanning."""
+"""Main orchestrator and CLI for unified Docker security & secret scanning."""
 
 import argparse
 from pathlib import Path
 import sys
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from dockscan.docker.image_loader import ImageLoadError, cleanup_temp_tar, load_image_tar
 from dockscan.docker.layer_extractor import (
@@ -13,12 +13,61 @@ from dockscan.docker.layer_extractor import (
     iter_layer_text_files,
     read_image_manifest,
 )
-from dockscan.docker.metadata import extract_metadata_from_tar
+from dockscan.docker.metadata import DockerMetadata, extract_metadata_from_tar
 from dockscan.models.finding import Finding, ScanReport
-from dockscan.reporting import format_json_report, format_terminal_report, write_json_report
-from dockscan.secrets.aggregator import aggregate_findings
+from dockscan.reporting import (
+    aggregate_findings,
+    convert_legacy_finding,
+    format_json_report,
+    format_terminal_report,
+    write_json_report,
+)
 from dockscan.secrets.filesystem_scanner import scan_layer_file
 from dockscan.secrets.metadata_scanner import scan_metadata
+from scanner.checks.ports_check import check_dangerous_ports
+from scanner.checks.root_check import check_root_user
+from scanner.checks.vuln_check import check_vulnerabilities
+from scanner.models import ImageMetadata
+from scanner.utils.osv import OSVApiError
+from scanner.utils.packages import PackageExtractionError, extract_packages
+
+
+def _run_static_config_checks(target: str, metadata: DockerMetadata) -> List[Finding]:
+    """Run Phase 2 configuration checks statically using tar-extracted metadata."""
+    legacy_meta = ImageMetadata(
+        target=target,
+        user=metadata.user,
+        exposed_ports=list(metadata.exposed_ports),
+        env=dict(metadata.env),
+        entrypoint=list(metadata.entrypoint),
+    )
+    raw = check_root_user(legacy_meta) + check_dangerous_ports(legacy_meta)
+    return [convert_legacy_finding(item) for item in raw]
+
+
+def _run_package_vuln_scan(
+    target: str, metadata: DockerMetadata
+) -> Tuple[int, List[Finding], List[str]]:
+    """Run Phase 3 package extraction and OSV.dev lookup for local Docker images."""
+    legacy_meta = ImageMetadata(target=target, user=metadata.user)
+    warnings: List[str] = []
+    try:
+        packages = extract_packages(legacy_meta)
+    except PackageExtractionError as exc:
+        warnings.append(str(exc))
+        return 0, [], warnings
+
+    legacy_meta.packages = packages
+    if not packages:
+        return 0, [], warnings
+
+    try:
+        raw_vulns = check_vulnerabilities(legacy_meta)
+    except OSVApiError as exc:
+        warnings.append(f"Vulnerability lookup skipped: {exc}")
+        return len(packages), [], warnings
+
+    return len(packages), [convert_legacy_finding(item) for item in raw_vulns], warnings
 
 
 def scan_image(
@@ -26,16 +75,19 @@ def scan_image(
     *,
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES,
     prefer_sdk: bool = True,
+    include_config: bool = True,
+    include_vulns: bool = False,
 ) -> ScanReport:
-    """Statically scan a Docker image (or `.tar` archive) for secrets.
+    """Scan a Docker image (or `.tar` archive) for secrets, misconfigurations, and CVEs.
 
-    Never executes the target image. Exports via Docker SDK or `docker image save`,
-    extracts metadata and individual layers via Python `tarfile`, and runs regex,
-    contextual, and entropy secret detection.
+    Secret and configuration checks run completely statically without executing
+    the target image. Package vulnerability scanning (`include_vulns=True`) is
+    optional and only runs on Docker image references (skipped for `.tar` files).
     """
     temp_dir: Optional[Path] = None
     target_path = Path(target)
-    if not target_path.is_file():
+    is_tar_file = target_path.is_file()
+    if not is_tar_file:
         temp_dir = Path(tempfile.mkdtemp(prefix="dockscan_"))
 
     try:
@@ -48,7 +100,11 @@ def scan_image(
         metadata = extract_metadata_from_tar(tar_path, manifest.config_path)
 
         raw_findings: List[Finding] = []
+        warnings: List[str] = []
+
         raw_findings.extend(scan_metadata(metadata))
+        if include_config:
+            raw_findings.extend(_run_static_config_checks(target, metadata))
 
         layers_seen = set()
         files_scanned = 0
@@ -62,13 +118,23 @@ def scan_image(
                 files_scanned += 1
                 raw_findings.extend(scan_layer_file(layer_file))
 
+        packages_scanned = 0
+        if include_vulns and not is_tar_file:
+            packages_scanned, vuln_findings, vuln_warnings = _run_package_vuln_scan(
+                target, metadata
+            )
+            raw_findings.extend(vuln_findings)
+            warnings.extend(vuln_warnings)
+
         aggregated = aggregate_findings(raw_findings)
         return ScanReport(
             target=target,
             image_id=metadata.image_id or None,
             layers_scanned=len(layers_seen),
             files_scanned=files_scanned,
+            packages_scanned=packages_scanned,
             findings=aggregated,
+            warnings=warnings,
         )
     finally:
         cleanup_temp_tar(temp_dir)
@@ -78,7 +144,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser for `dockscan`."""
     parser = argparse.ArgumentParser(
         prog="dockscan",
-        description="Statically scan Docker image layers and metadata for exposed secrets.",
+        description="Analyze Docker images for secrets, misconfigurations, and package vulnerabilities.",
     )
     parser.add_argument(
         "target",
@@ -89,6 +155,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=10.0,
         help="Maximum text file size to scan in MB (default: 10).",
+    )
+    parser.add_argument(
+        "--with-vulns",
+        action="store_true",
+        help="Also extract packages and query OSV.dev for known CVEs.",
+    )
+    parser.add_argument(
+        "--secrets-only",
+        action="store_true",
+        help="Run only secret scanning (skip image configuration checks).",
     )
     parser.add_argument(
         "--json",
@@ -119,6 +195,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             args.target,
             max_file_bytes=max_bytes,
             prefer_sdk=not args.no_sdk,
+            include_config=not args.secrets_only,
+            include_vulns=args.with_vulns,
         )
     except (ImageLoadError, LayerExtractionError) as exc:
         print(f"Error: {exc}", file=sys.stderr)

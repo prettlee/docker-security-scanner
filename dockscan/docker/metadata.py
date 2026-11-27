@@ -26,6 +26,7 @@ class DockerMetadata:
     labels: Dict[str, str] = field(default_factory=dict)
     history: List[HistoryEntry] = field(default_factory=list)
     user: str = ""
+    exposed_ports: List[str] = field(default_factory=list)
     entrypoint: List[str] = field(default_factory=list)
     cmd: List[str] = field(default_factory=list)
 
@@ -84,12 +85,20 @@ def parse_image_config_json(
                 )
             )
 
+    raw_ports = cfg.get("ExposedPorts")
+    exposed_ports = (
+        sorted(str(port) for port in raw_ports.keys())
+        if isinstance(raw_ports, dict)
+        else []
+    )
+
     return DockerMetadata(
         image_id=image_id,
         env=_parse_env_list(cfg.get("Env")),
         labels=labels,
         history=history_entries,
         user=str(cfg.get("User") or ""),
+        exposed_ports=exposed_ports,
         entrypoint=_parse_str_list(cfg.get("Entrypoint")),
         cmd=_parse_str_list(cfg.get("Cmd")),
     )
