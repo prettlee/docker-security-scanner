@@ -30,11 +30,18 @@ inputs:
     description: "Path where the JSON scan report will be written."
     required: false
     default: "dockscan-report.json"
+  sarif-file:
+    description: "Optional path where a SARIF v2.1.0 report will be written for GitHub Code Scanning."
+    required: false
+    default: ""
 
 outputs:
   report-path:
     description: "Path to the generated JSON report."
     value: ${{ steps.run-dockscan.outputs.report_path }}
+  sarif-path:
+    description: "Path to the generated SARIF report (if sarif-file was provided)."
+    value: ${{ steps.run-dockscan.outputs.sarif_path }}
   total-findings:
     description: "Total number of findings detected."
     value: ${{ steps.run-dockscan.outputs.total_findings }}
@@ -73,9 +80,13 @@ runs:
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_MAX_FILE_MB: ${{ inputs.max-file-mb }}
         INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
       run: |
         set +e
         ARGS=("${INPUT_TARGET}" "--output" "${INPUT_OUTPUT_FILE}" "--fail-on" "${INPUT_FAIL_ON}" "--github-summary")
+        if [ -n "${INPUT_SARIF_FILE}" ]; then
+          ARGS+=("--sarif" "${INPUT_SARIF_FILE}")
+        fi
 
         if [ "${INPUT_SCAN_TYPE}" = "dockerfile" ]; then
           ARGS+=("--dockerfile")
@@ -93,6 +104,7 @@ runs:
         EXIT_CODE=$?
 
         echo "report_path=${INPUT_OUTPUT_FILE}" >> "${GITHUB_OUTPUT}"
+        echo "sarif_path=${INPUT_SARIF_FILE}" >> "${GITHUB_OUTPUT}"
         if [ -f "${INPUT_OUTPUT_FILE}" ]; then
           python3 - "${INPUT_OUTPUT_FILE}" "${GITHUB_OUTPUT}" << 'PYEOF'
         import json

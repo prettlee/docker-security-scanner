@@ -13,6 +13,11 @@ from dockscan.reporting.github_summary import (
 )
 from dockscan.reporting.html_report import format_html_report, write_html_report
 from dockscan.reporting.json_report import format_json_report, write_json_report
+from dockscan.reporting.sarif_report import (
+    build_sarif_dict,
+    format_sarif_report,
+    write_sarif_report,
+)
 from dockscan.reporting.scoring import (
     classify_severity,
     confidence_label_from_score,
@@ -25,12 +30,14 @@ from dockscan.reporting.terminal import format_terminal_report
 __all__ = [
     "FAIL_ON_CHOICES",
     "aggregate_findings",
+    "build_sarif_dict",
     "classify_severity",
     "confidence_label_from_score",
     "convert_legacy_finding",
     "format_github_summary",
     "format_html_report",
     "format_json_report",
+    "format_sarif_report",
     "format_terminal_report",
     "normalize_confidence",
     "normalize_finding",
@@ -40,4 +47,5 @@ __all__ = [
     "write_github_summary",
     "write_html_report",
     "write_json_report",
+    "write_sarif_report",
 ]

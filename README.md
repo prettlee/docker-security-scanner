@@ -11,7 +11,7 @@ A Python-based security scanner to analyze Dockerfiles, Docker images, and conta
    - **Never executes the target image** during secret/config scanning: exports via Docker SDK or `docker image save` (or reads a `.tar` archive directly) and parses layers with Python `tarfile`
    - Scans individual layers (including files deleted in later layers) for text files up to 10 MB
    - Combines regex + contextual rules, Shannon entropy analysis, and image metadata scanning (`ENV`, `LABEL`, build `history`)
-   - **Unified Reporting (Phase 5)**: aggregates secrets, configuration checks, and optional CVE findings with severity classification (`Critical`, `High`, `Medium`, `Low`), numeric confidence scoring (`0.00–1.00`), redacted terminal output, structured JSON reports, and a self-contained interactive **HTML dashboard** (`--html`)
+   - **Unified Reporting (Phase 5)**: aggregates secrets, configuration checks, and optional CVE findings with severity classification (`Critical`, `High`, `Medium`, `Low`), numeric confidence scoring (`0.00–1.00`), redacted terminal output, structured JSON reports, self-contained interactive **HTML dashboard** (`--html`), and **SARIF v2.1.0** (`--sarif`) for GitHub Code Scanning
 3. **`dockscan/dockerfile/` (Phase 6 — Static Dockerfile Security Analysis)**
    - Analyzes Dockerfiles independently from built images (handling line continuations and multi-stage builds)
    - Detects `:latest`/untagged `FROM` images, missing non-root `USER`, hardcoded credentials, unsafe `ADD` instructions, unpinned `pip`/`npm`/`apt`/`apk` dependencies, insecure `RUN` install commands (`curl|sh`, disabled TLS/signature verification, `http://`, `chmod 777`), and missing `HEALTHCHECK`
@@ -33,22 +33,29 @@ A Python-based security scanner to analyze Dockerfiles, Docker images, and conta
     output-file: dockscan-report.json
 ```
 
-Or scan a Dockerfile in CI:
+Or scan a Dockerfile and upload SARIF to GitHub Code Scanning:
 
 ```yaml
 - name: Scan Dockerfile
+  id: dockscan
   uses: prettlee/docker-security-scanner@main
   with:
     target: ./Dockerfile
     scan-type: dockerfile
-    fail-on: high
+    fail-on: none
+    sarif-file: dockscan.sarif
+
+- name: Upload SARIF to GitHub Code Scanning
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: ${{ steps.dockscan.outputs.sarif-path }}
 ```
 
 ### Phase 6: Static Dockerfile Analysis
 
 ```bash
 python3 -m dockscan.dockerfile ./Dockerfile
-python3 -m dockscan --dockerfile ./Dockerfile --json --output dockerfile-report.json --html dockerfile-report.html
+python3 -m dockscan --dockerfile ./Dockerfile --json --output dockerfile-report.json --html dockerfile-report.html --sarif dockerfile.sarif
 ```
 
 ### Phases 4 & 5: Built Image Security & Secret Report

@@ -27,6 +27,7 @@ from dockscan.reporting import (
     write_github_summary,
     write_html_report,
     write_json_report,
+    write_sarif_report,
 )
 from dockscan.secrets.filesystem_scanner import scan_layer_file
 from dockscan.secrets.metadata_scanner import scan_metadata
@@ -187,6 +188,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write a self-contained interactive HTML dashboard to the specified path.",
     )
     parser.add_argument(
+        "--sarif",
+        help="Write a SARIF v2.1.0 report for GitHub Code Scanning to the specified path.",
+    )
+    parser.add_argument(
         "--dockerfile",
         action="store_true",
         help="Treat `target` as a Dockerfile path and run static Dockerfile analysis.",
@@ -245,6 +250,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.html:
         write_html_report(report, args.html)
+
+    if args.sarif:
+        write_sarif_report(report, args.sarif)
 
     if args.github_summary:
         write_github_summary(report, os.environ.get("GITHUB_STEP_SUMMARY"))

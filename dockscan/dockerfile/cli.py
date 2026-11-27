@@ -11,6 +11,7 @@ from dockscan.reporting import (
     format_terminal_report,
     write_html_report,
     write_json_report,
+    write_sarif_report,
 )
 
 
@@ -38,6 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--html",
         help="Write an interactive HTML dashboard report to the specified path.",
     )
+    parser.add_argument(
+        "--sarif",
+        help="Write a SARIF v2.1.0 report for GitHub Code Scanning to the specified path.",
+    )
     return parser
 
 
@@ -62,5 +67,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.html:
         write_html_report(report, args.html)
+
+    if args.sarif:
+        write_sarif_report(report, args.sarif)
 
     return 1 if report.findings else 0
